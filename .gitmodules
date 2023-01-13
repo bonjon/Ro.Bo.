@@ -1,0 +1,9 @@
+[submodule "exts/corrade"]
+	path = exts/corrade
+	url = https://github.com/mosra/corrade.git
+[submodule "exts/magnum"]
+	path = exts/magnum
+	url = https://github.com/mosra/magnum
+[submodule "exts/magnum-plugins"]
+	path = exts/magnum-plugins
+	url = https://github.com/mosra/magnum-plugins
