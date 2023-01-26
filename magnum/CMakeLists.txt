@@ -55,6 +55,9 @@ target_link_libraries(animate PRIVATE
     Magnum::MeshTools
     Magnum::Shaders
     Magnum::Magnum
+    Magnum::SceneGraph
     MagnumPlugins::GltfImporter)
+
+target_compile_features(animate PUBLIC cxx_std_20)
 
 # add_dependencies(animate MagnumPlugins::GltfImporter)
