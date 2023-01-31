@@ -1,3 +1,5 @@
+#include "Corrade/Utility/Arguments.h"
+#include "Corrade/Utility/FormatStl.h"
 #include "Magnum/GL/Mesh.h"
 #include "Magnum/GL/Shader.h"
 #include "Magnum/Magnum.h"
@@ -53,21 +55,36 @@ private:
   Matrix4 &_jointMatrix;
 };
 
-class MyApplication : public Platform::Application {
+struct ObjectInfo {
+  Object3D object;
+  std::string name;
+};
+
+struct Person3D {
+  Containers::Array<ObjectInfo> objects;
+  Containers::Array<Matrix4> jointMatrices;
+  Corrade::Containers::Optional<Trade::SkinData3D> skin;
+  GL::Mesh mesh;
+  SceneGraph::DrawableGroup3D jointDrawables;
+  Matrix4 transform;
+};
+
+class RoboAnimate : public Platform::Application {
 public:
-  explicit MyApplication(const Arguments &arguments);
+  explicit RoboAnimate(const Arguments &arguments);
 
 private:
   void drawEvent() override;
-  void calculateSkinning(const Trade::SceneData &scene,
-                         const Trade::SkinData3D &newSkinning);
+  Containers::Optional<Person3D>
+  calculateSkinning(Trade::GltfImporter &importer);
 
   Shaders::PhongGL m_shader;
-  Corrade::Containers::Optional<Trade::SkinData3D> m_skin;
+
+  Containers::Optional<Person3D> m_person;
+
+  // Corrade::Containers::Optional<Trade::SkinData3D> m_skin;
   Object3D m_meshObject;
-  GL::Mesh m_mesh;
   Color3 m_color;
-  Matrix4 m_transformation;
   Matrix4 m_projection;
   Containers::Array<Matrix4> m_skinJointMatrices;
   Math::Deg<float> m_move_joint;
@@ -75,12 +92,17 @@ private:
   Scene3D m_scene;
   std::unique_ptr<SceneGraph::Camera3D> m_rootCamera;
   std::unique_ptr<Object3D> m_rootCameraObject;
-  SceneGraph::DrawableGroup3D m_jointDrawables;
-  Containers::Array<Object3D> m_objects;
 };
 
-MyApplication::MyApplication(const Arguments &arguments)
-    : Platform::Application{arguments} {
+RoboAnimate::RoboAnimate(const Arguments &arguments)
+    : Platform::Application{arguments,
+                            Configuration{}.setTitle("Robo: Animation")} {
+
+  Utility::Arguments argParser;
+  // clang-format off
+  argParser.addArgument("model").setHelp("model", "The model to load")
+           .parse(arguments.argc, arguments.argv);
+  // clang-format on
 
   GL::Renderer::enable(GL::Renderer::Feature::DepthTest);
   GL::Renderer::enable(GL::Renderer::Feature::FaceCulling);
@@ -89,53 +111,13 @@ MyApplication::MyApplication(const Arguments &arguments)
 
   Trade::GltfImporter importer;
 
-  importer.openFile("model.glb");
-  Debug{} << "Scene count: " << importer.sceneCount();
-  auto scene = importer.scene(importer.defaultScene());
-  Debug{} << "Mapping bound:" << scene->mappingBound();
-  Debug{} << "Mesh count: " << importer.meshCount();
-  auto mesh = importer.mesh(0);
-  const Containers::Array<Containers::Pair<UnsignedInt, Int>> parents =
-      scene->parentsAsArray();
+  importer.openFile(argParser.value("model"));
 
-  m_meshObject.setParent(&m_scene);
+  m_person = calculateSkinning(importer);
 
   m_rootCameraObject = std::make_unique<Object3D>(&m_scene);
   m_rootCamera = std::make_unique<SceneGraph::Camera3D>(*m_rootCameraObject);
 
-  Debug{} << "Skins: " << importer.skin3DCount();
-  m_skin = importer.skin3D(0);
-  if (m_skin) {
-    calculateSkinning(*scene, *m_skin);
-  }
-
-  Debug{} << "Animations: " << importer.animationCount();
-
-  Debug{} << "Joints: " << m_skin->joints();
-  Debug{} << "Inverse Bind: "
-          << m_skin->inverseBindMatrices()[m_skin->joints()[0]];
-
-  for (int i = 0; i < mesh->attributeCount(); ++i) {
-    Debug{} << mesh->attributeName(i);
-  }
-
-  m_mesh = MeshTools::compile(*mesh);
-  Containers::Pair<UnsignedInt, UnsignedInt> meshPerVertexJointCount =
-      MeshTools::compiledPerVertexJointCount(*mesh);
-
-  m_shader = Shaders::PhongGL{Shaders::PhongGL::Configuration{}.setJointCount(
-      m_skin->joints().size(), meshPerVertexJointCount.first(),
-      meshPerVertexJointCount.second())};
-
-  const auto weights = mesh->weightsAsArray();
-  const auto joints = m_skin->joints();
-
-  Debug{} << "Weights:" << weights.size() << "Joints:" << joints.size()
-          << "W/J:" << weights.size() / joints.size();
-
-  m_transformation =
-      Matrix4::rotationX(10.0_degf) * Matrix4::rotationY(-25.0_degf);
-  // Matrix4::scaling({10, 10, 10});
   m_projection =
       Matrix4::perspectiveProjection(
           90.0_degf, Vector2{windowSize()}.aspectRatio(), 0.01f, 100.0f) *
@@ -143,50 +125,71 @@ MyApplication::MyApplication(const Arguments &arguments)
   m_color = Color3::fromSrgb({0.6, 0.7, 0.7});
 }
 
-void MyApplication::calculateSkinning(const Trade::SceneData &scene,
-                                      const Trade::SkinData3D &skinData) {
-  m_objects =
-      Containers::Array<Object3D>(ValueInit, std::size_t{scene.mappingBound()});
+Containers::Optional<Person3D>
+RoboAnimate::calculateSkinning(Trade::GltfImporter &importer) {
+
+  auto optScene = importer.scene(importer.defaultScene());
+  if (!optScene) {
+    return Containers::NullOpt;
+  }
+
+  Person3D person;
+  person.objects = Containers::Array<ObjectInfo>{
+      ValueInit, std::size_t(optScene->mappingBound())};
+
+  person.skin = importer.skin3D(0);
 
   const Containers::Array<Containers::Pair<UnsignedInt, Int>> parents =
-      scene.parentsAsArray();
+      optScene->parentsAsArray();
   for (const Containers::Pair<UnsignedInt, Int> &parent : parents) {
     const UnsignedInt objectId = parent.first();
-    m_objects[objectId].setParent(
-        parent.second() == -1 ? &m_scene : &m_objects[parent.second()]);
-
-    // if (parent.second() != -1)
-    //   ++_data->objects[parent.second()].childCount;
-    // _data->objects[objectId].object = new Object3D{};
-    // _data->objects[objectId].type = "empty";
-    // _data->objects[objectId].name = importer.objectName(objectId);
-    // if (_data->objects[objectId].name.empty())
-    //   _data->objects[objectId].name =
-    //       Utility::formatString("object #{}", objectId);
+    auto &objectInfo = person.objects[objectId];
+    objectInfo.name = Utility::formatString("Object #{}", objectId);
+    objectInfo.object.setParent(parent.second() == -1
+                                    ? &m_scene
+                                    : &person.objects[parent.second()].object);
   }
 
   for (const Containers::Pair<UnsignedInt, Matrix4> &transformation :
-       scene.transformations3DAsArray()) {
-    Object3D &object = m_objects[transformation.first()];
+       optScene->transformations3DAsArray()) {
+    Object3D &object = person.objects[transformation.first()].object;
     object.setTransformation(transformation.second());
   }
 
-  const auto &joints = skinData.joints();
-  m_skinJointMatrices = Containers::Array<Matrix4>{NoInit, joints.size()};
+  const auto &joints = person.skin->joints();
+  person.jointMatrices = Containers::Array<Matrix4>{NoInit, joints.size()};
   for (int i = 0; i < joints.size(); ++i) {
     const auto objectId = joints[i];
+    auto &object = person.objects[objectId].object;
 
     // What an hack, holy shit
-    new JointDrawable{m_objects[objectId], skinData.inverseBindMatrices()[i],
-                      m_skinJointMatrices[i], m_jointDrawables};
+    new JointDrawable{object, person.skin->inverseBindMatrices()[i],
+                      person.jointMatrices[i], person.jointDrawables};
   }
+
+  auto mesh = importer.mesh(0);
+  person.mesh = MeshTools::compile(*mesh);
+
+  Containers::Pair<UnsignedInt, UnsignedInt> meshPerVertexJointCount =
+      MeshTools::compiledPerVertexJointCount(*mesh);
+
+  m_shader = Shaders::PhongGL{Shaders::PhongGL::Configuration{}.setJointCount(
+      joints.size(), meshPerVertexJointCount.first(),
+      meshPerVertexJointCount.second())};
+
+  person.transform =
+      Matrix4::rotationX(10.0_degf) * Matrix4::rotationY(-25.0_degf);
+
+  return person;
 }
 
-void MyApplication::drawEvent() {
+void RoboAnimate::drawEvent() {
   GL::defaultFramebuffer.clearColor({0.25f, 0.1f, 0.25f});
   GL::defaultFramebuffer.clear(GL::FramebufferClear::Depth);
 
-  m_objects[23].setRotation(Quaternion::rotation(m_move_joint, {0, 1, 0}));
+  auto &objects = m_person->objects;
+
+  objects[23].object.setRotation(Quaternion::rotation(m_move_joint, {0, 1, 0}));
 
   // m_skinJointMatrices[3] = m_skinJointMatrices[3].rotationZ(m_move_joint *
   // 10); const auto max_joints = m_skinJointMatrices.size();
@@ -200,16 +203,16 @@ void MyApplication::drawEvent() {
   //                                                 m_skin->joints().size()};
 
   // m_rootCameraObject->rotate(Quaternion::rotation(1.0_degf, {0, 1, 0}));
-  m_rootCamera->draw(m_jointDrawables);
+  m_rootCamera->draw(m_person->jointDrawables);
 
   m_shader.setLightPositions({{1.4f, 1.0f, 0.75f, 0.0f}})
       .setDiffuseColor(m_color)
       .setAmbientColor(Color3::fromHsv({m_color.hue(), 1.0f, 0.3f}))
-      .setTransformationMatrix(m_transformation)
-      .setNormalMatrix(m_transformation.normalMatrix())
+      .setTransformationMatrix(m_person->transform)
+      .setNormalMatrix(m_person->transform.normalMatrix())
       .setProjectionMatrix(m_projection)
-      .setJointMatrices(m_skinJointMatrices)
-      .draw(m_mesh);
+      .setJointMatrices(m_person->jointMatrices)
+      .draw(m_person->mesh);
 
   if (m_move_joint <= -45.0_degf) {
     m_move_joint = 0.0_degf;
@@ -221,4 +224,4 @@ void MyApplication::drawEvent() {
   redraw();
 }
 
-MAGNUM_APPLICATION_MAIN(MyApplication)
+MAGNUM_APPLICATION_MAIN(RoboAnimate)

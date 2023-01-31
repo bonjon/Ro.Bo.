@@ -16,3 +16,6 @@
 [submodule "magnum/exts/magnum-plugins"]
 	path = magnum/exts/magnum-plugins
 	url = https://github.com/mosra/magnum-plugins.git
+[submodule "animatepy/magnum-bindings"]
+	path = animatepy/magnum-bindings
+	url = https://github.com/mosra/magnum-bindings.git
