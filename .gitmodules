@@ -19,3 +19,12 @@
 [submodule "animatepy/magnum-bindings"]
 	path = animatepy/magnum-bindings
 	url = https://github.com/mosra/magnum-bindings.git
+[submodule "magnum/exts/openpose"]
+	path = magnum/exts/openpose
+	url = https://github.com/CMU-Perceptual-Computing-Lab/openpose
+[submodule "magnum/3rdparty/caffe"]
+	path = magnum/3rdparty/caffe
+	url = https://github.com/BVLC/caffe
+[submodule "magnum/exts/mediapipe"]
+	path = magnum/exts/mediapipe
+	url = https://github.com/google/mediapipe.git

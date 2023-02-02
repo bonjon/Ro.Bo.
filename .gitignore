@@ -1,2 +1,4 @@
 magnum/build
 magnum/.cache
+animatepy/venv
+animatepy/*.glb
