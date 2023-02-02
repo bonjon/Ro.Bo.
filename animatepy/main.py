@@ -4,6 +4,12 @@ from direct.actor.Actor import Actor
 from direct.task import Task
 from panda3d.core import Material, DirectionalLight, LQuaternionf, LVector3f
 
+import cv2
+import mediapipe as mp
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_pose = mp.solutions.pose
+
 # import mediapipe
 
 
@@ -26,23 +32,30 @@ class MyApp(ShowBase):
         self.material.setShininess(5.0) # Make this material shiny
         self.material.setAmbient((0, 0, 1, 1)) # Make this material blue
         self.model.setMaterial(self.material)
+        self.video = cv2.VideoCapture(0)
 
         self.counter = 0
 
-        self.taskMgr.add(self.spinJoint, "SpinJoint")
+        # self.taskMgr.add(self.spinJoint, "SpinJoint")
+        self.taskMgr.add(self.poseEstimation, "Pose Estimation")
 
-    def spinJoint(self, time):
-        tmp = self.counter / 5
-
-        quat = LQuaternionf()
-        quat.setFromAxisAngle(-tmp, LVector3f(1, 0, 0))
-        # quat.setFromAxisAngle(tmp, LVector3f(0, 1, 0))
-        self.dummy.setQuat(quat)
-        self.counter += 1
-        if self.counter >= 180:
-            self.counter = 0
+    def poseEstimation(self, time):
+        ret, frame = self.video.read()
 
         return Task.cont
+
+    # def spinJoint(self, time):
+    #     tmp = self.counter / 5
+    #
+    #     quat = LQuaternionf()
+    #     quat.setFromAxisAngle(-tmp, LVector3f(1, 0, 0))
+    #     # quat.setFromAxisAngle(tmp, LVector3f(0, 1, 0))
+    #     self.dummy.setQuat(quat)
+    #     self.counter += 1
+    #     if self.counter >= 180:
+    #         self.counter = 0
+    #
+    #     return Task.cont
 
 
 
