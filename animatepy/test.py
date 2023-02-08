@@ -55,19 +55,16 @@ class Animate(ShowBase):
         self.root_node = self.render.attachNewNode("Torso")
         geom = create_axes(0.3)
         self.root_node.attach_new_node(geom)
-        self.root_height = 0.956756
-        self.root_node.set_pos(0, 0, self.root_height)
         self.target__node = self.render.attach_new_node("Walk target")
 
         self.model = Actor('giua.glb')
         # self.model = Actor('person.glb')
         self.ikmodel = IKActor(self.model)
-        self.ikmodel.actor.set_hpr(0, 90, 0)
         print(self.model.list_joints())
         self.ikmodel.reparent_to(self.root_node)
 
         self.ik_chain_left_arm = self.ikmodel.create_ik_chain(
-            ['joint_9', 'joint_5', 'joint_5_dup_1', 'joint_8', 'joint_7', 'joint_4'])
+            ['joint_6', 'joint_8', 'joint_7', 'joint_1'])
         # self.ik_chain_left_arm = self.ikmodel.create_ik_chain(
         #     ['Shoulder.L', 'UpperArm.L', 'LowerArm.L', 'Hand.L'])
         self.ik_chain_left_arm.debug_display(line_length=0.1)
