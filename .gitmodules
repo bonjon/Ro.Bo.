@@ -28,3 +28,6 @@
 [submodule "magnum/exts/mediapipe"]
 	path = magnum/exts/mediapipe
 	url = https://github.com/google/mediapipe.git
+[submodule "animatepy/exts/ik"]
+	path = animatepy/exts/ik
+	url = https://github.com/Germanunkol/CCD-IK-Panda3D
