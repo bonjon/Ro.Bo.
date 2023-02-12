@@ -3,7 +3,8 @@ from direct.showbase.ShowBase import ShowBase
 from direct.actor.Actor import Actor
 from direct.task import Task
 from enum import Enum
-from panda3d.core import Material, DirectionalLight, Vec3, Vec4, Mat4, Mat3, LPoint3, ClientBase, NodePath, LineSegs, GeomVertexWriter, PointLight, AmbientLight, Quat
+from panda3d.core import Material, DirectionalLight, Vec3, Vec4, Mat4, Mat3, LPoint3, ClientBase, NodePath, LineSegs, GeomVertexWriter, PointLight, AmbientLight, Quat, CharacterJointBundle
+import math
 
 from exts.ik.CCDIK.ik_actor import IKActor, IKChain
 
@@ -32,167 +33,205 @@ def transform_to_hip_origin(world_landmarks):
     return world_landmarks
 
 
-def saacos(f: float) -> float:
-    if f <= -1.0:
-        return np.pi
-    if f >= 1.0:
-        return 0
-
-    return np.arccos(f)
-
-
-def axis_angle_normalized_to_quat(axis: Vec3, angle: float) -> Quat:
-    phi = 0.5 * angle
-    si = np.sin(phi)
-    co = np.cos(phi)
-    q = Quat(co, axis * si)
-    return q
-
-
-def vec_to_track_quat(vec: Vec3, axis: Vec3, up: Vec3):
-    vec: Vec3 = -vec
-
-    eps = 1e-4
-    normal: Vec3 = Vec3()
-    tvec: Vec3 = Vec3()
-
-    angle = 0
-    si = 0
-    co = 0
-    len = vec.length()
-
-    if axis.x == -1:
-        tvec = vec
-        axis.x = 1
-    elif axis.y == -1:
-        tvec = vec
-        axis.y = 1
-    elif axis.z == -1:
-        tvec = vec
-        axis.z = 1
-    else:
-        tvec = -vec
-
-    if axis.x == 1:
-        normal = Vec3(0, -tvec.y, tvec.x)
-        if (abs(tvec.y) + abs(tvec.z)) < eps:
-            normal.y = 1
-        co = tvec.x
-    elif axis.y == 1:
-        normal = Vec3(tvec.z, 0, -tvec.x)
-        if (abs(tvec.x) + abs(tvec.z)) < eps:
-            normal.z = 1
-        co = tvec.y
-    else:
-        normal = Vec3(-tvec.y, tvec.x, 0)
-        if (abs(tvec.x) + abs(tvec.y)) < eps:
-            normal.x = 1
-        co = tvec.z
-
-    co /= len
-
-    normal.normalize()
-
-    quat = axis_angle_normalized_to_quat(normal, saacos(co))
-
-    if axis != up:
-        mat: Mat3 = Mat3()
-        quat2: Quat = Quat()
-        quat.extractToMatrix(mat)
-
-        if axis.x == 1:
-            if up.y == 1:
-                angle = 0.5 * np.arctan2(mat[2][2], mat[2][1])
-            else:
-                angle = -0.5 * np.arctan2(mat[2][1], mat[2][2])
-        elif axis.y == 1:
-            if up.x == 1:
-                angle = -0.5 * np.arctan2(mat[2][2], mat[2][0])
-            else:
-                angle = 0.5 * np.arctan2(mat[2][0], mat[2][2])
-        else:
-            if up.x == 1:
-                angle = 0.5 * np.arctan2(-mat[2][1], -mat[2][0])
-            else:
-                angle = -0.5 * np.arctan2(-mat[2][0], -mat[2][1])
-
-        co = np.cos(angle)
-        si = np.sin(angle) / len
-        quat2.set(co, tvec.x * si, tvec.y * si, tvec.z * si)
-
-        quat = quat * quat2
-
-    return quat
-
-
-def rotate_towards(source: Vec3, dest: Vec3, up: Vec3 = Vec3(0, 1, 0), axis: Vec3 = Vec3(0, 0, 1)) -> Quat:
-    direction: Vec3 = dest - source
-    direction.normalize()
-
-    # return quat
-    return vec_to_track_quat(direction, axis, up)
-
-
-def normal_from_plane(a: Vec3, b: Vec3, c: Vec3) -> Vec3:
-    return (b - a).cross(c - a)
-
-
 LANDMARK_SCALE = 10
 
-IK_CHAIN_INFOS = {
-    mp_pose.PoseLandmark.LEFT_WRIST: {
-        'joints': ['joint_6', 'joint_8', 'joint_7', 'joint_1'],
-        'target_name': 'right_wrist',
-        'constraints': [
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_5_dup_0',
-            #     'unit': Vec3(0, 0, 1),
-            #     'min_angle': 0,
-            #     'max_angle': np.pi * 0.05
-            # },
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_9',
-            #     'unit': Vec3(0, 0, 1),
-            #     'min_angle': 0,
-            #     'max_angle': np.pi * 0.05
-            # },
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_0',
-            #     'unit': Vec3(1, 0, 0),
-            #     'min_angle': -np.pi * 0.1,
-            #     'max_angle': np.pi * 0.1
-            # },
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_9',
-            #     'unit': Vec3(1, 0, 0),
-            #     'min_angle': -np.pi * 0.1,
-            #     'max_angle': np.pi * 0.01
-            # },
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_14',
-            #     'unit': Vec3(0, 1, 0),
-            #     'min_angle': -np.pi * 0.75,
-            #     'max_angle': np.pi * 0.75
-            # },
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_12',
-            #     'unit': Vec3(0, 0, 1),
-            #     'min_angle': -np.pi * 0.5,
-            #     'max_angle': np.pi * 0.5
-            # },
-        ]
-    },
 
-    mp_pose.PoseLandmark.RIGHT_WRIST: {
-        'joints': ['joint_21', 'joint_23', 'joint_22', 'joint_16'],
-        'target_name': 'right_wrist',
-        'constraints': [
+def generate_ik_chain_info(model: Actor) -> dict:
+    right_arm = [j.getName() for j in model.getJoints(None, "right_arm_*")]
+    left_arm = [j.getName() for j in model.getJoints(None, "left_arm_*")]
+    right_leg = [j.getName() for j in model.getJoints(None, "right_leg_*")]
+    left_leg = [j.getName() for j in model.getJoints(None, "left_leg_*")]
+    head = [j.getName() for j in model.getJoints(None, "head_*")]
+
+    right_arm_constraints = [
+        {
+            'type': 1,
+            'joint': 'right_arm_0',
+            'unit': -Vec3.unit_z(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05
+        },
+        {
+            'type': 1,
+            'joint': 'right_arm_1',
+            'unit': -Vec3.unit_z(),
+            'min_angle': -np.pi * 0.25,
+            'max_angle': np.pi * 0.5
+        },
+    ]
+
+    if len(right_arm_constraints) < len(right_arm):
+        right_arm_constraints = right_arm_constraints[:len(right_arm) - 1]
+
+    left_arm_constraints = [
+        {
+            'type': 1,
+            'joint': 'left_arm_0',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05
+        },
+        {
+            'type': 1,
+            'joint': 'left_arm_1',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.25,
+            'max_angle': np.pi * 0.5
+        },
+    ]
+
+    if len(left_arm_constraints) < len(left_arm):
+        left_arm_constraints = left_arm_constraints[:len(left_arm) - 1]
+
+    right_leg_constraints = [
+        {
+            'type': 1,
+            'joint': 'right_leg_0',
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'right_leg_1',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': right_leg[math.ceil((len(right_leg) - 1) / 2)],
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.20,
+            'max_angle': np.pi * 0.20,
+        },
+        # The ankle, moves just left or right
+        {
+            'type': 1,
+            'joint': right_leg[-2],
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.25,
+        },
+        {
+            'type': 1,
+            'joint': right_leg[-1],
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.1,
+            'max_angle': np.pi * 0.1,
+        },
+        # Other joints that we may want to limit, but are not essential
+        {
+            'type': 1,
+            'joint': 'right_leg_2',
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'right_leg_3',
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'right_leg_4',
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'right_leg_5',
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+    ]
+
+    if len(right_leg) < len(right_leg_constraints):
+        right_leg_constraints = right_leg_constraints[:len(right_leg) - 1]
+
+    left_leg_constraints = [
+        {
+            'type': 1,
+            'joint': 'left_leg_0',
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'left_leg_1',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': left_leg[math.ceil((len(left_leg) - 1) / 2)],
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.20,
+            'max_angle': np.pi * 0.20,
+        },
+        # The ankle, moves just left or right
+        {
+            'type': 1,
+            'joint': left_leg[-2],
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.25,
+        },
+        {
+            'type': 1,
+            'joint': left_leg[-1],
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.1,
+            'max_angle': np.pi * 0.1,
+        },
+    ]
+
+    if len(left_leg) < len(left_leg_constraints):
+        left_leg_constraints = left_leg_constraints[:len(left_leg) - 1]
+
+    head_constraints = [
+        {
+            'type': 1,
+            'joint': 'head_0',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.01,
+            'max_angle': np.pi * 0.01,
+        },
+        {
+            'type': 1,
+            'joint': 'head_1',
+            'unit': Vec3.unit_y(),
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        {
+            'type': 1,
+            'joint': 'head_2',
+            'unit': Vec3.unit_x(),
+            'min_angle': -np.pi * 0.1,
+            'max_angle': np.pi * 0.1,
+        }
+    ]
+
+    if len(head) < len(head_constraints):
+        head_constraints = head_constraints[:len(head) - 1]
+
+    return {
+        mp_pose.PoseLandmark.LEFT_WRIST: {
+            'joints': left_arm,
+            'constraints': left_arm_constraints
+        },
+
+        mp_pose.PoseLandmark.RIGHT_WRIST: {
+            'joints': right_arm,
+            'constraints': right_arm_constraints,
             # {
             #     'type': 1,
             #     'joint': 'joint_3',
@@ -214,85 +253,23 @@ IK_CHAIN_INFOS = {
             #     'min_angle': -np.pi * 0.5,
             #     'max_angle': np.pi * 0.5
             # },
-        ]
-    },
+        },
 
-    mp_pose.PoseLandmark.NOSE: {
-        'joints': ['joint_11', 'joint_14'],
-        'constraints': [
-            {
-                'type': 1,
-                'joint': 'joint_11',
-                'unit': Vec3.unit_z(),
-                'min_angle': -np.pi * 0.15,
-                'max_angle': np.pi * 0.15,
-            }
-        ]
-    },
+        mp_pose.PoseLandmark.LEFT_ANKLE: {
+            'joints': left_leg,
+            'constraints': left_leg_constraints
+        },
 
-    # CustomLandmark.ShoulderCenter: {
-    # },
-    # CustomLandmark.HipCenter: {
-    # },
+        mp_pose.PoseLandmark.RIGHT_ANKLE: {
+            'joints': right_leg,
+            'constraints': right_leg_constraints
+        },
 
-    # mp_pose.PoseLandmark.RIGHT_ANKLE: {
-    #     'joints': ['joint_16', 'joint_18', 'joint_17'],
-    #     # 'static': 'Shoulder.L',
-    #     'target_name': 'right_ankle',
-    #     'constraints': [
-    #         # {
-    #         #     'type': 1,
-    #         #     'joint': 'joint_3',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': np.pi * 0.05,
-    #         #     'max_angle': np.pi * 0.05
-    #         # },
-    #         # {'joint_1'
-    #         #     'type': 0,
-    #         #     'joint': 'joint_2',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': -np.pi * 0.5,
-    #         #     'max_angle': np.pi * 0.5
-    #         # },
-    #         # {
-    #         #     'type': 0,
-    #         #     'joint': 'joint_0',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': -np.pi * 0.5,
-    #         #     'max_angle': np.pi * 0.5
-    #         # },
-    #     ]
-    # },
-    #
-    # mp_pose.PoseLandmark.LEFT_ANKLE: {
-    #     'joints': ['joint_4', 'joint_6', 'joint_5'],
-    #     # 'static': 'Shoulder.L',
-    #     'target_name': 'left_ankle',
-    #     'constraints': [
-    #         # {
-    #         #     'type': 1,
-    #         #     'joint': 'joint_3',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': np.pi * 0.05,
-    #         #     'max_angle': np.pi * 0.05
-    #         # },
-    #         # {'joint_1'
-    #         #     'type': 0,
-    #         #     'joint': 'joint_2',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': -np.pi * 0.5,
-    #         #     'max_angle': np.pi * 0.5
-    #         # },
-    #         # {
-    #         #     'type': 0,
-    #         #     'joint': 'joint_0',
-    #         #     'unit': Vec3(0, 1, 0),
-    #         #     'min_angle': -np.pi * 0.5,
-    #         #     'max_angle': np.pi * 0.5
-    #         # },
-    #     ]
-    # }
-}
+        mp_pose.PoseLandmark.NOSE: {
+            'joints': head,
+            'constraints': head_constraints,
+        },
+    }
 
 
 class Animate(ShowBase):
@@ -307,7 +284,7 @@ class Animate(ShowBase):
         alnp = self.render.attachNewNode(alight)
         self.rootNode = self.render.attachNewNode("Torso")
         self.mp_nodes_root = self.render.attachNewNode("MPRoot")
-        self.mp_nodes_root.reparentTo(self.render)
+        self.mp_nodes_root.hide()
         self.rootNode.setScale(8, 8, 8)
         self.rootNode.setHpr(0, 180, 0)
         self.render.setLight(alnp)
@@ -315,6 +292,15 @@ class Animate(ShowBase):
         self.ikmodel = IKActor(self.model)
         self.ikmodel.reparent_to(self.rootNode)
         print(self.ikmodel.actor)
+        self.ik_chain_info = generate_ik_chain_info(self.model)
+
+        # self.horn = self.loader.loadModel("horn.glb")
+        # self.horn.setScale(2, 2, 2)
+        #
+        # head = self.model.exposeJoint(
+        #     None, "modelRoot", "left_arm_3")
+        # self.horn.reparentTo(head)
+        # self.horn.setPos(head.getPos())
 
         self.camera.setPos(0, 0, 10)
         self.material = Material()
@@ -328,9 +314,9 @@ class Animate(ShowBase):
 
         self.pose = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=2,
+            model_complexity=1,
             enable_segmentation=True,
-            min_detection_confidence=0.5)
+            min_detection_confidence=0.7)
 
         self.counter = 0
 
@@ -383,6 +369,8 @@ class Animate(ShowBase):
         setLandmark(lms.RIGHT_ANKLE)
         setLandmark(lms.LEFT_HIP)
         setLandmark(lms.LEFT_KNEE)
+        setLandmark(lms.LEFT_ANKLE)
+        setLandmark(lms.RIGHT_ANKLE)
 
         setLandmark(CustomLandmark.ShoulderCenter)
         setLandmark(CustomLandmark.HipCenter)
@@ -390,16 +378,19 @@ class Animate(ShowBase):
         self.ikchains = {}
 
         for lm in lms:
-            if lm in IK_CHAIN_INFOS:
-                self.ikchains[lm] = initIKChain(lm, IK_CHAIN_INFOS[lm])
+            if lm in self.ik_chain_info:
+                self.ikchains[lm] = initIKChain(lm, self.ik_chain_info[lm])
 
     def setMPPose(self, pose, landmark: mp_pose.PoseLandmark):
         if landmark not in self.mp_nodes:
             return
 
         pos = pose.pose_world_landmarks.landmark[landmark]
+        if pos.visibility <= 0.60:
+            return
+
         # print(f"{landmark} : {pos}")
-        pos = Vec3(-pos.x * LANDMARK_SCALE, pos.z *
+        pos = Vec3(pos.x * LANDMARK_SCALE, pos.z *
                    LANDMARK_SCALE / 2, -pos.y * LANDMARK_SCALE)
         self.mp_nodes[landmark].setFluidPos(pos)
         if landmark in self.ikchains:
@@ -412,9 +403,6 @@ class Animate(ShowBase):
         if not results.pose_world_landmarks:
             return Task.cont
 
-        wlandmarks = results.pose_world_landmarks
-        landmarks = [[lm, Vec3(-wlandmarks.landmark[lm].x, wlandmarks.landmark[lm].z, -wlandmarks.landmark[lm].y)]
-                     for idx, lm in enumerate(mp_pose.PoseLandmark)]
         for landmark in mp_pose.PoseLandmark:
             self.setMPPose(results, landmark)
 
