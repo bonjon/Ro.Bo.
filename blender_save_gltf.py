@@ -2,6 +2,208 @@ import bpy
 import argparse
 import mathutils
 from math import radians
+import re
+
+# blender -P blender_save_gltf.py -- -i quick_start/result_ori.obj -r quick_start/result_ori_rig.txt -o quick_start/result.glb
+
+
+def removeDuplicateBones(joint_hier, joint_pos):
+    new_hier = joint_hier.copy()
+    new_pos = joint_pos.copy()
+
+    default_duplicated = {}
+    for pos in joint_pos:
+        match: re.Match = re.search(r"joint_(\d+)_dup_(\d+)", pos)
+        if match is not None:
+            id = match.groups()[0]
+            dup = match.groups()[1]
+            joint = f'joint_{id}'
+
+            if joint not in default_duplicated:
+                default_duplicated[joint] = set()
+
+            default_duplicated[joint].add(
+                f'joint_{id}_dup_{dup}')
+
+        match: re.Match = re.search(r"root_dup_(\d+)", pos)
+        if match is not None:
+            dup = match.groups()[0]
+
+            if 'root' not in default_duplicated:
+                default_duplicated['root'] = set()
+
+            default_duplicated['root'].add(
+                f'root_dup_{dup}')
+
+    for parent, duplicated_joints in default_duplicated.items():
+        # root, [root_dup_0, root_dup_1, root_dup_2]
+        for child in duplicated_joints:
+            print(f"{parent} -> {child}")
+            if child in new_hier:
+                new_hier[parent].remove(child)
+                new_hier[parent] += new_hier[child]
+                new_hier.pop(child)
+                new_pos.pop(child)
+
+    # print("AFTER REMOVING DUPs", new_hier)
+
+    # positions = [(j, pos) for j, pos in new_pos.items()]
+    # positions = sorted(positions, key=lambda x: x[1])
+    #
+    # duplicated_joints = {}
+    #
+    # print("DUPLICATED JOINTS:", duplicated_joints)
+
+    # print("OLD HIERARCHY", joint_hier)
+    #
+    # def fix_duplicated_roots(parent, joint):
+    #     ending_childs = set()
+    #     print(f"Watching {parent} -> {joint}")
+    #     if joint in duplicated_joints:
+    #         for child in duplicated_joints[joint]:
+    #             ending_childs |= fix_duplicated_roots(joint, child)
+    #             duplicated_joints.pop(joint)
+    #     else:
+    #         ending_childs.add(joint)
+    #
+    #     return ending_childs
+    #
+    # for parent, children in duplicated_joints.copy().items():
+    #     print(f"FIXING DUPLICATES FOR {parent} ({children}):")
+    #     res = set()
+    #     for child in children:
+    #         res |= fix_duplicated_roots(parent, child)
+    #
+    #     print(f"\t {parent}: {res}")
+    #     if parent in duplicated_joints:
+    #         duplicated_joints[parent] = res
+    #
+    # print("FINAL DUPLICATE SET", duplicated_joints)
+    #
+    # for root, children in duplicated_joints.items():
+    #     for child in children:
+    #         if root not in new_hier:
+    #             new_hier[root] = []
+    #
+    #         if child in new_hier:
+    #             new_hier[root] += new_hier[child]
+    #             new_hier.pop(child)
+    #             new_pos.pop(child)
+    #
+    #         if child in new_hier[root]:
+    #             new_hier[root].remove(child)
+    #
+    #         for parent, other_childs in new_hier.items():
+    #             if child in other_childs:
+    #                 other_childs.remove(child)
+
+    for parent, children in new_hier.copy().items():
+        if len(children) == 0:
+            new_hier.pop(parent)
+
+    print("NEW HIERARCHY", new_hier)
+
+    return new_hier, new_pos
+
+
+def adjustBones(joint_hier, joint_pos):
+    new_pos = joint_pos.copy()
+    new_hier = joint_hier.copy()
+    limbs_roots = {}
+    labeled_leaves = {}
+
+    leaves = [n for n in joint_pos.keys() if n not in joint_hier]
+    print(f'Leaves: {leaves}\npos: \t{[joint_pos[l] for l in leaves]}')
+
+    highest_x, highest_y = (0, 0)
+    lowest_x, lowest_y, second_lowest_y = (0, 0, 0)
+
+    labeled_leaves["right_arm_0"] = []
+    labeled_leaves["left_arm_0"] = []
+    labeled_leaves["head_0"] = []
+    labeled_leaves["right_leg_0"] = []
+    labeled_leaves["left_leg_0"] = []
+
+    for leaf in leaves:
+        pos = joint_pos[leaf]
+
+        if pos[0] > highest_x:
+            labeled_leaves["left_arm_0"] = leaf
+            highest_x = pos[0]
+        if pos[0] < lowest_x:
+            labeled_leaves["right_arm_0"] = leaf
+            lowest_x = pos[0]
+        if pos[1] > highest_y:
+            labeled_leaves["head_0"] = leaf
+            highest_y = pos[1]
+        if pos[1] < lowest_y and pos[0] > 0:
+            labeled_leaves["left_leg_0"] = leaf
+            lowest_y = pos[1]
+        if pos[1] < second_lowest_y and pos[0] < 0:
+            labeled_leaves["right_leg_0"] = leaf
+            second_lowest_y = pos[1]
+
+    inverted_labeled_leaves = {}
+
+    for k, v in labeled_leaves.items():
+        inverted_labeled_leaves[v] = k
+
+    labeled_leaves = inverted_labeled_leaves
+
+    print(f'Leaves: {labeled_leaves}')
+
+    # here we find the limb "root" (the beginning of the limb)
+    for parent, children in joint_hier.items():
+        limb_root_candidate = children[0]
+        candidate_parent = parent
+        print(f'Inspecting {parent} -> {children}...')
+        if len(children) == 1 and children[0] in labeled_leaves:
+            while len(joint_hier[candidate_parent]) < 2:
+                # print(
+                #     f'\t{candidate_parent} -> {joint_hier[candidate_parent]}')
+                for parent_it, children_it in joint_hier.items():
+                    if candidate_parent in children_it:
+                        print(f'Candidate parent: {candidate_parent}')
+                        limb_root_candidate = candidate_parent
+                        candidate_parent = parent_it
+            limbs_roots[limb_root_candidate] = labeled_leaves[children[0]]
+
+    # restructure the hierarchy
+    print(f'Limb roots:\n \t {limbs_roots}')
+    print(f'Limb children:\n\t {[joint_hier[r] for r in limbs_roots]}')
+    for limb_root in limbs_roots:
+        print(f'Limb root: {limb_root}')
+        counter = 0
+        pos = joint_pos[limb_root]
+        old_name = limb_root
+        new_name = limbs_roots[limb_root]
+
+        while old_name in joint_hier:
+            new_name = new_name[:-1]+str(counter)
+            # il while controlla anche se è l'ultimo parent della catena
+            new_pos[new_name] = joint_pos[old_name]
+            new_pos.pop(old_name)
+            print(f'{old_name} -> {new_name}: {joint_hier[old_name]}')
+            if joint_hier[old_name][0] in joint_hier:
+                new_hier[new_name] = [new_name[:-1]+(str(counter+1))]
+            else:
+                leaf_pos = joint_pos[joint_hier[old_name][0]]
+                new_pos[new_name[:-1]+(str(counter+1))] = leaf_pos
+                new_pos.pop(joint_hier[old_name][0])
+
+                new_hier[new_name[:-1] +
+                         str(counter)] = [new_name[:-1]+(str(counter+1))]
+
+            counter += 1
+            new_hier.pop(old_name)
+            old_name = joint_hier[old_name][0]
+
+        for parent, children in new_hier.items():
+            if limb_root in children:
+                children[children.index(limb_root)] = limbs_roots[limb_root]
+
+    print(f'Resulted in:\n\t{new_pos}\n\t{new_hier}')
+    return new_hier, new_pos
 
 
 def loadInfo(info_name, geo_name):
@@ -37,6 +239,9 @@ def loadInfo(info_name, geo_name):
 
     print(joint_hier)
 
+    joint_hier, joint_pos = removeDuplicateBones(joint_hier, joint_pos)
+    joint_hier, joint_pos = adjustBones(joint_hier, joint_pos)
+
     current_mesh = bpy.context.selected_objects[0]
 
     this_level = [root_name]
@@ -46,6 +251,7 @@ def loadInfo(info_name, geo_name):
             print(f'Looking at {node}')
             pos = joint_pos[node]
             bone = armature.edit_bones.new(node)
+            print(pos)
             bone.head.x, bone.head.y, bone.head.z = pos[0], pos[1], pos[2]
 
             # if bone.name not in current_mesh.vertex_groups:
@@ -92,13 +298,7 @@ def loadInfo(info_name, geo_name):
 
         this_level = next_level
 
-    print(joint_skin)
     bpy.ops.object.mode_set(mode='POSE')
-    # for v_skin in joint_skin:
-    #    v_idx = int(v_skin.pop(0))
-    #
-    #    for i in range(0, len(v_skin), 2):
-    #        current_mesh.vertex_groups[v_skin[i]].add([v_idx], float(v_skin[i + 1]), 'REPLACE')
 
     # rigged_model.matrix_world = current_mesh.matrix_world
     # rigged_model.matrix_world.translation = mathutils.Vector()
@@ -119,7 +319,6 @@ def loadInfo(info_name, geo_name):
 
     # disconnect bones
     armature = bpy.context.active_object
-    print(armature.data.edit_bones)
     for bone_name, bone in armature.data.edit_bones.items():
         bone.use_connect = False
 
@@ -129,16 +328,6 @@ def loadInfo(info_name, geo_name):
         bone.tail = bone.head - mathutils.Vector((0, bone.length, 0))
         bone.roll = 0
 
-    # for bone_name, bone in armature.data.edit_bones.items():
-    #     old_head = bone.head.copy()
-    #     R = mathutils.Matrix.Rotation(radians(90), 4, bone.x_axis.normalized())
-    #     bone.transform(R)
-    #     offset_vec = -(bone.head - old_head)
-    #     bone.head += offset_vec
-    #     bone.tail += offset_vec
-
-    # armature.world_matrix.translation
-
     return root_name, joint_pos
 
 
@@ -146,16 +335,6 @@ def getMeshOrigin():
     bpy.ops.object.select_by_type(type='MESH')
     bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
 
-    # for geo in geometries:
-    #     if 'ShapeOrig' in geo:
-    #         '''
-    #         we can also use cmds.ls(geo, l=True)[0].split("|")[0]
-    #         to get the upper level node name, but stick on this way for now
-    #         '''
-    #         geo_name = geo.replace('ShapeOrig', '')
-    #         geo_list.append(geo_name)
-    # if not geo_list:
-    #     geo_list = cmds.ls(type='surfaceShape')
     return bpy.context.selected_objects[0]
 
 
@@ -176,23 +355,14 @@ def get_args():
 
 
 if __name__ == '__main__':
-    model_id = "smith"
-    print(model_id)
-    obj_name = 'quick_start/{:s}_ori.obj'.format(model_id)
-    info_name = 'quick_start/{:s}_ori_rig.txt'.format(model_id)
-    out_name = 'quick_start/{:s}.gltf'.format(model_id)
-
     bpy.ops.object.delete({"selected_objects": [bpy.data.objects['Cube']]})
 
     args = get_args()
 
     # import obj
     bpy.ops.import_scene.obj(filepath=args.model)
-    # cmds.file(new=True,force=True)
-    # cmds.file(obj_name, o=True)
 
     mesh = getMeshOrigin()
-    print(mesh.matrix_world)
     mesh.rotation_euler = (mathutils.Euler((0, 0, 0)))
     mesh.location.xyz = 0
 
