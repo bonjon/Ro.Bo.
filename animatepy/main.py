@@ -44,40 +44,40 @@ def generate_ik_chain_info(model: Actor) -> dict:
     head = [j.getName() for j in model.getJoints(None, "head_*")]
 
     right_arm_constraints = [
-        {
-            'type': 1,
-            'joint': 'right_arm_0',
-            'unit': -Vec3.unit_z(),
-            'min_angle': -np.pi * 0.05,
-            'max_angle': np.pi * 0.05
-        },
-        {
-            'type': 1,
-            'joint': 'right_arm_1',
-            'unit': -Vec3.unit_z(),
-            'min_angle': -np.pi * 0.25,
-            'max_angle': np.pi * 0.5
-        },
+        # {
+        #     'type': 1,
+        #     'joint': 'right_arm_0',
+        #     'unit': -Vec3.unit_z(),
+        #     'min_angle': -np.pi * 0.05,
+        #     'max_angle': np.pi * 0.05
+        # },
+        # {
+        #     'type': 1,
+        #     'joint': 'right_arm_1',
+        #     'unit': -Vec3.unit_z(),
+        #     'min_angle': -np.pi * 0.25,
+        #     'max_angle': np.pi * 0.5
+        # },
     ]
 
     if len(right_arm_constraints) < len(right_arm):
         right_arm_constraints = right_arm_constraints[:len(right_arm) - 1]
 
     left_arm_constraints = [
-        {
-            'type': 1,
-            'joint': 'left_arm_0',
-            'unit': Vec3.unit_z(),
-            'min_angle': -np.pi * 0.05,
-            'max_angle': np.pi * 0.05
-        },
-        {
-            'type': 1,
-            'joint': 'left_arm_1',
-            'unit': Vec3.unit_z(),
-            'min_angle': -np.pi * 0.25,
-            'max_angle': np.pi * 0.5
-        },
+        # {
+        #     'type': 1,
+        #     'joint': 'left_arm_0',
+        #     'unit': Vec3.unit_z(),
+        #     'min_angle': -np.pi * 0.05,
+        #     'max_angle': np.pi * 0.05
+        # },
+        # {
+        #     'type': 1,
+        #     'joint': 'left_arm_1',
+        #     'unit': Vec3.unit_z(),
+        #     'min_angle': -np.pi * 0.25,
+        #     'max_angle': np.pi * 0.5
+        # },
     ]
 
     if len(left_arm_constraints) < len(left_arm):
@@ -193,6 +193,9 @@ def generate_ik_chain_info(model: Actor) -> dict:
         },
     ]
 
+    print(right_leg[:-2])
+    print(right_leg[-2:])
+
     if len(left_leg) < len(left_leg_constraints):
         left_leg_constraints = left_leg_constraints[:len(left_leg) - 1]
 
@@ -201,68 +204,69 @@ def generate_ik_chain_info(model: Actor) -> dict:
             'type': 1,
             'joint': 'head_0',
             'unit': Vec3.unit_z(),
-            'min_angle': -np.pi * 0.01,
-            'max_angle': np.pi * 0.01,
-        },
-        {
-            'type': 1,
-            'joint': 'head_1',
-            'unit': Vec3.unit_y(),
             'min_angle': -np.pi * 0.05,
             'max_angle': np.pi * 0.05,
         },
         {
             'type': 1,
-            'joint': 'head_2',
+            'joint': 'head_1',
             'unit': Vec3.unit_x(),
-            'min_angle': -np.pi * 0.1,
-            'max_angle': np.pi * 0.1,
-        }
+            'min_angle': -np.pi * 0.05,
+            'max_angle': np.pi * 0.05,
+        },
+        # {
+        #     'type': 1,
+        #     'joint': 'head_2',
+        #     'unit': Vec3.unit_x(),
+        #     'min_angle': -np.pi * 0.1,
+        #     'max_angle': np.pi * 0.1,
+        # }
     ]
 
     if len(head) < len(head_constraints):
         head_constraints = head_constraints[:len(head) - 1]
 
     return {
+        mp_pose.PoseLandmark.LEFT_ELBOW: {
+            'joints': left_arm[:-2],
+            'constraints': left_arm_constraints,
+        },
+
         mp_pose.PoseLandmark.LEFT_WRIST: {
-            'joints': left_arm,
-            'constraints': left_arm_constraints
+            'joints': left_arm[-3:],
+            'constraints': []
+        },
+
+        mp_pose.PoseLandmark.RIGHT_ELBOW: {
+            'joints': right_arm[:-2],
+            'constraints': right_arm_constraints,
         },
 
         mp_pose.PoseLandmark.RIGHT_WRIST: {
-            'joints': right_arm,
-            'constraints': right_arm_constraints,
-            # {
-            #     'type': 1,
-            #     'joint': 'joint_3',
-            #     'unit': Vec3(0, 1, 0),
-            #     'min_angle': np.pi * 0.05,
-            #     'max_angle': np.pi * 0.05
-            # },
-            # {
-            #     'type': 0,
-            #     'joint': 'joint_2',
-            #     'unit': Vec3(0, 1, 0),
-            #     'min_angle': -np.pi * 0.5,
-            #     'max_angle': np.pi * 0.5
-            # },
-            # {
-            #     'type': 0,
-            #     'joint': 'joint_0',
-            #     'unit': Vec3(0, 1, 0),
-            #     'min_angle': -np.pi * 0.5,
-            #     'max_angle': np.pi * 0.5
-            # },
+            'joints': right_arm[-3:],
+            'constraints': [],
+        },
+
+        mp_pose.PoseLandmark.LEFT_KNEE: {
+            'joints': left_leg[:-2],
+            'constraints': []
         },
 
         mp_pose.PoseLandmark.LEFT_ANKLE: {
-            'joints': left_leg,
-            'constraints': left_leg_constraints
+            'joints': left_leg[-3:],
+            'constraints': []
         },
 
+
+        mp_pose.PoseLandmark.RIGHT_KNEE: {
+            'joints': right_leg[:-2],
+            'constraints': []
+        },
+
+
         mp_pose.PoseLandmark.RIGHT_ANKLE: {
-            'joints': right_leg,
-            'constraints': right_leg_constraints
+            'joints': right_leg[-3:],
+            'constraints': []
         },
 
         mp_pose.PoseLandmark.NOSE: {
@@ -284,23 +288,23 @@ class Animate(ShowBase):
         alnp = self.render.attachNewNode(alight)
         self.rootNode = self.render.attachNewNode("Torso")
         self.mp_nodes_root = self.render.attachNewNode("MPRoot")
-        self.mp_nodes_root.hide()
+        # self.mp_nodes_root.hide()
         self.rootNode.setScale(8, 8, 8)
         self.rootNode.setHpr(0, 180, 0)
         self.render.setLight(alnp)
-        self.model = Actor('giua.glb')
+        self.model = Actor('giua_256.glb')
         self.ikmodel = IKActor(self.model)
         self.ikmodel.reparent_to(self.rootNode)
         print(self.ikmodel.actor)
         self.ik_chain_info = generate_ik_chain_info(self.model)
 
-        # self.horn = self.loader.loadModel("horn.glb")
-        # self.horn.setScale(2, 2, 2)
-        #
-        # head = self.model.exposeJoint(
-        #     None, "modelRoot", "left_arm_3")
-        # self.horn.reparentTo(head)
-        # self.horn.setPos(head.getPos())
+        self.horn = self.loader.loadModel("horn.glb")
+
+        head = self.model.exposeJoint(
+            None, "modelRoot", "left_arm_3")
+        head.reparentTo(self.render)
+        self.horn.reparentTo(head)
+        self.horn.setMat(head.getMat())
 
         self.camera.setPos(0, 0, 10)
         self.material = Material()
@@ -354,7 +358,7 @@ class Animate(ShowBase):
                         constraint['unit'],
                         min_ang=constraint['min_angle'],
                         max_ang=constraint['max_angle'])
-            chain.debug_display()
+            # chain.debug_display()
             return chain
 
         setLandmark(lms.NOSE)
