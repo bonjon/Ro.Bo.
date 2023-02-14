@@ -298,13 +298,13 @@ class Animate(ShowBase):
         print(self.ikmodel.actor)
         self.ik_chain_info = generate_ik_chain_info(self.model)
 
-        self.horn = self.loader.loadModel("horn.glb")
-
-        head = self.model.exposeJoint(
-            None, "modelRoot", "left_arm_3")
-        head.reparentTo(self.render)
-        self.horn.reparentTo(head)
-        self.horn.setMat(head.getMat())
+        # self.horn = self.loader.loadModel("horn.glb")
+        #
+        # head = self.model.exposeJoint(
+        #     None, "modelRoot", "left_arm_3")
+        # head.reparentTo(self.render)
+        # self.horn.reparentTo(head)
+        # self.horn.setMat(head.getMat())
 
         self.camera.setPos(0, 0, 10)
         self.material = Material()
