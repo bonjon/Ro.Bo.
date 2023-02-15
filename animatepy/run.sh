@@ -4,4 +4,4 @@ rm -rf ~/.cache/panda3d
 
 
 
-python3 ./main.py
+python3 ./main.py $@

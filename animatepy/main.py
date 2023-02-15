@@ -11,6 +11,7 @@ from exts.ik.CCDIK.ik_actor import IKActor, IKChain
 import numpy as np
 import cv2
 import mediapipe as mp
+import argparse
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_pose = mp.solutions.pose
@@ -292,7 +293,10 @@ class Animate(ShowBase):
         self.rootNode.setScale(8, 8, 8)
         self.rootNode.setHpr(0, 180, 0)
         self.render.setLight(alnp)
-        self.model = Actor('giua_256.glb')
+        parser = argparse.ArgumentParser()
+        parser.add_argument('model')
+        args = parser.parse_args()
+        self.model = Actor(args.model)
         self.ikmodel = IKActor(self.model)
         self.ikmodel.reparent_to(self.rootNode)
         print(self.ikmodel.actor)
