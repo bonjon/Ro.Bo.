@@ -3,7 +3,7 @@ from direct.showbase.ShowBase import ShowBase
 from direct.actor.Actor import Actor
 from direct.task import Task
 from enum import Enum
-from panda3d.core import Material, DirectionalLight, Vec3, Vec4, Mat4, Mat3, LPoint3, ClientBase, NodePath, LineSegs, GeomVertexWriter, PointLight, AmbientLight, Quat, CharacterJointBundle
+from panda3d.core import Material, DirectionalLight, Vec3, Vec4, Mat4, Mat3, LPoint3, ClientBase, NodePath, LineSegs, GeomVertexWriter, PointLight, AmbientLight, Quat, CharacterJointBundle, CharacterJoint, PartBundle
 import math
 
 from exts.ik.CCDIK.ik_actor import IKActor, IKChain
@@ -23,8 +23,16 @@ class CustomLandmark(Enum):
     Offset = 102,
 
 
+LANDMARK_SCALE = 10
+
+
 def center_point(a: Vec3, b: Vec3):
     return (a + b) / 2
+
+
+def convert_lm_to_vec3(pos):
+    return Vec3(pos.x * LANDMARK_SCALE, pos.z *
+                LANDMARK_SCALE / 2, -pos.y * LANDMARK_SCALE)
 
 
 def transform_to_hip_origin(world_landmarks):
@@ -34,7 +42,18 @@ def transform_to_hip_origin(world_landmarks):
     return world_landmarks
 
 
-LANDMARK_SCALE = 10
+def find_parent(root: PartBundle, to_find):
+    print(root.getChildren(), to_find)
+    levels = root.getChildren()
+    while levels:
+        next_level = []
+
+        for node in levels:
+            if to_find in [x.getName() for x in node.getChildren()]:
+                return node
+
+            next_level += node.getChildren()
+        levels = next_level
 
 
 def generate_ik_chain_info(model: Actor) -> dict:
@@ -43,6 +62,16 @@ def generate_ik_chain_info(model: Actor) -> dict:
     right_leg = [j.getName() for j in model.getJoints(None, "right_leg_*")]
     left_leg = [j.getName() for j in model.getJoints(None, "left_leg_*")]
     head = [j.getName() for j in model.getJoints(None, "head_*")]
+
+    part_bundle = model.getPartBundle("modelRoot")
+
+    print(model.listJoints())
+
+    left_arm_parent = find_parent(part_bundle, "left_arm_0")
+    right_arm_parent = find_parent(part_bundle, "right_arm_0")
+    hip = find_parent(part_bundle, "left_leg_0")
+
+    print("Hip:", hip.getName())
 
     right_arm_constraints = [
         {
@@ -228,19 +257,29 @@ def generate_ik_chain_info(model: Actor) -> dict:
         head_constraints = head_constraints[:len(head) - 1]
 
     return {
+        # CustomLandmark.HipCenter: {
+        #     'joints': ['root'],
+        #     'constraints': [],
+        # },
+        #
         mp_pose.PoseLandmark.LEFT_SHOULDER: {
-            'joints': [left_arm[0]],
+            'joints': [left_arm_parent.getName(), left_arm[0]],
             'constraints': [],
         },
 
         mp_pose.PoseLandmark.LEFT_ELBOW: {
-            'joints': left_arm[1:-2],
+            'joints': left_arm[:-2],
             'constraints': [],
         },
 
         mp_pose.PoseLandmark.LEFT_WRIST: {
             'joints': left_arm[-3:],
             'constraints': []
+        },
+
+        mp_pose.PoseLandmark.RIGHT_SHOULDER: {
+            'joints': [right_arm_parent.getName(), right_arm[0]],
+            'constraints': [],
         },
 
         mp_pose.PoseLandmark.RIGHT_ELBOW: {
@@ -386,7 +425,7 @@ class Animate(ShowBase):
         setLandmark(lms.RIGHT_ANKLE)
 
         setLandmark(CustomLandmark.ShoulderCenter)
-        setLandmark(CustomLandmark.HipCenter)
+        # setLandmark(CustomLandmark.HipCenter)
 
         self.ikchains = {}
 
@@ -394,7 +433,26 @@ class Animate(ShowBase):
             if lm in self.ik_chain_info:
                 self.ikchains[lm] = initIKChain(lm, self.ik_chain_info[lm])
 
+        # self.ikchains[CustomLandmark.HipCenter] = initIKChain(
+        #     CustomLandmark.HipCenter, self.ik_chain_info[CustomLandmark.HipCenter])
+
     def setMPPose(self, pose, landmark: mp_pose.PoseLandmark):
+        if landmark == CustomLandmark.HipCenter:
+            lm_0 = mp_pose.PoseLandmark.LEFT_HIP
+            lm_1 = mp_pose.PoseLandmark.RIGHT_HIP
+            pos_0 = pose.pose_world_landmarks.landmark[lm_0]
+            pos_1 = pose.pose_world_landmarks.landmark[lm_1]
+
+            pos_0 = convert_lm_to_vec3(pos_0)
+            pos_1 = convert_lm_to_vec3(pos_1)
+            hip = center_point(pos_0, pos_1)
+
+            self.mp_nodes[landmark].setFluidPos(hip)
+            if landmark in self.ikchains:
+                self.ikchains[landmark].update_ik()
+
+            return
+
         if landmark not in self.mp_nodes:
             return
 
@@ -403,8 +461,7 @@ class Animate(ShowBase):
             return
 
         # print(f"{landmark} : {pos}")
-        pos = Vec3(pos.x * LANDMARK_SCALE, pos.z *
-                   LANDMARK_SCALE / 2, -pos.y * LANDMARK_SCALE)
+        pos = convert_lm_to_vec3(pos)
         self.mp_nodes[landmark].setFluidPos(pos)
         if landmark in self.ikchains:
             self.ikchains[landmark].update_ik()
@@ -418,6 +475,8 @@ class Animate(ShowBase):
 
         for landmark in mp_pose.PoseLandmark:
             self.setMPPose(results, landmark)
+
+        # self.setMPPose(results, CustomLandmark.HipCenter)
 
         return Task.cont
 
