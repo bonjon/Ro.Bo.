@@ -45,13 +45,13 @@ def generate_ik_chain_info(model: Actor) -> dict:
     head = [j.getName() for j in model.getJoints(None, "head_*")]
 
     right_arm_constraints = [
-        # {
-        #     'type': 1,
-        #     'joint': 'right_arm_0',
-        #     'unit': -Vec3.unit_z(),
-        #     'min_angle': -np.pi * 0.05,
-        #     'max_angle': np.pi * 0.05
-        # },
+        {
+            'type': 1,
+            'joint': 'right_arm_0',
+            'unit': -Vec3.unit_z(),
+            'min_angle': -np.pi * 0.5,
+            'max_angle': np.pi * 0.5
+        },
         # {
         #     'type': 1,
         #     'joint': 'right_arm_1',
@@ -65,13 +65,13 @@ def generate_ik_chain_info(model: Actor) -> dict:
         right_arm_constraints = right_arm_constraints[:len(right_arm) - 1]
 
     left_arm_constraints = [
-        # {
-        #     'type': 1,
-        #     'joint': 'left_arm_0',
-        #     'unit': Vec3.unit_z(),
-        #     'min_angle': -np.pi * 0.05,
-        #     'max_angle': np.pi * 0.05
-        # },
+        {
+            'type': 1,
+            'joint': 'left_arm_0',
+            'unit': Vec3.unit_z(),
+            'min_angle': -np.pi * 0.5,
+            'max_angle': np.pi * 0.5
+        },
         # {
         #     'type': 1,
         #     'joint': 'left_arm_1',
@@ -228,9 +228,14 @@ def generate_ik_chain_info(model: Actor) -> dict:
         head_constraints = head_constraints[:len(head) - 1]
 
     return {
+        mp_pose.PoseLandmark.LEFT_SHOULDER: {
+            'joints': [left_arm[0]],
+            'constraints': [],
+        },
+
         mp_pose.PoseLandmark.LEFT_ELBOW: {
-            'joints': left_arm[:-2],
-            'constraints': left_arm_constraints,
+            'joints': left_arm[1:-2],
+            'constraints': [],
         },
 
         mp_pose.PoseLandmark.LEFT_WRIST: {
@@ -362,7 +367,7 @@ class Animate(ShowBase):
                         constraint['unit'],
                         min_ang=constraint['min_angle'],
                         max_ang=constraint['max_angle'])
-            # chain.debug_display()
+            chain.debug_display()
             return chain
 
         setLandmark(lms.NOSE)
