@@ -23,6 +23,13 @@ class CustomLandmark(Enum):
     Offset = 102,
 
 
+class ModelCustomizations(Enum):
+    No = 0,
+    Angel = 1,
+    Devil = 2,
+    Pirate = 3
+
+
 LANDMARK_SCALE = 10
 
 
@@ -262,14 +269,30 @@ def generate_ik_chain_info(model: Actor) -> dict:
         #     'constraints': [],
         # },
         #
-        mp_pose.PoseLandmark.LEFT_SHOULDER: {
-            'joints': [left_arm_parent.getName(), left_arm[0]],
-            'constraints': [],
-        },
+        # mp_pose.PoseLandmark.LEFT_SHOULDER: {
+        #     'joints': [left_arm[0]],
+        #     'constraints': [
+        #         # {
+        #         #     'type': 1,
+        #         #     'joint': left_arm[0],
+        #         #     'unit': Vec3.unit_x(),
+        #         #     'min_angle': -np.pi * 0.25,
+        #         #     'max_angle': np.pi * 0.1
+        #         # }
+        #     ],
+        # },
 
         mp_pose.PoseLandmark.LEFT_ELBOW: {
             'joints': left_arm[:-2],
-            'constraints': [],
+            'constraints': [
+                # {
+                #     'type': 1,
+                #     'joint': left_arm[0],
+                #     'unit': Vec3.unit_z(),
+                #     'min_angle': -np.pi * 0.25,
+                #     'max_angle': np.pi * 0.5
+                # }
+            ],
         },
 
         mp_pose.PoseLandmark.LEFT_WRIST: {
@@ -277,10 +300,18 @@ def generate_ik_chain_info(model: Actor) -> dict:
             'constraints': []
         },
 
-        mp_pose.PoseLandmark.RIGHT_SHOULDER: {
-            'joints': [right_arm_parent.getName(), right_arm[0]],
-            'constraints': [],
-        },
+        # mp_pose.PoseLandmark.RIGHT_SHOULDER: {
+        #     'joints': [right_arm[0]],
+        #     'constraints': [
+        #         # {
+        #         #     'type': 1,
+        #         #     'joint': right_arm_parent.getName(),
+        #         #     'unit': Vec3.unit_x(),
+        #         #     'min_angle': -np.pi * 0.25,
+        #         #     'max_angle': np.pi * 0.1
+        #         # }
+        #     ],
+        # },
 
         mp_pose.PoseLandmark.RIGHT_ELBOW: {
             'joints': right_arm[:-2],
@@ -326,43 +357,36 @@ class Animate(ShowBase):
         ShowBase.__init__(self)
         self.dlight = PointLight('my dlight')
         self.dlnp = self.render.attachNewNode(self.dlight)
-        self.dlnp.setPos(0, -10, 0)
+        self.dlnp.setPos(0, -100, 20)
         self.render.setLight(self.dlnp)
         alight = AmbientLight('alight')
         alight.setColor((0.2, 0.2, 0.2, 1))
         alnp = self.render.attachNewNode(alight)
+        self.render.setLight(alnp)
         self.rootNode = self.render.attachNewNode("Torso")
         self.mp_nodes_root = self.render.attachNewNode("MPRoot")
-        # self.mp_nodes_root.hide()
+        self.mp_nodes_root.hide()
         self.rootNode.setScale(8, 8, 8)
         self.rootNode.setHpr(0, 180, 0)
-        self.render.setLight(alnp)
         parser = argparse.ArgumentParser()
         parser.add_argument('model')
         args = parser.parse_args()
         self.model = Actor(args.model)
+        # self.model.setColor((1, 1, 1, 1))
         self.ikmodel = IKActor(self.model)
         self.ikmodel.reparent_to(self.rootNode)
         print(self.ikmodel.actor)
         self.ik_chain_info = generate_ik_chain_info(self.model)
 
-        # self.horn = self.loader.loadModel("horn.glb")
-        #
-        # head = self.model.exposeJoint(
-        #     None, "modelRoot", "left_arm_3")
-        # head.reparentTo(self.render)
-        # self.horn.reparentTo(head)
-        # self.horn.setMat(head.getMat())
-
-        self.camera.setPos(0, 0, 10)
+        self.camera.setPos(0, 0, 100)
         self.material = Material()
         self.material.setShininess(5.0)  # Make this material shiny
-        self.material.setAmbient((0, 0, 1, 1))  # Make this material blue
+        self.material.setAmbient((1, 0, 0, 1))  # Make this material blue
         self.model.setMaterial(self.material)
         self.video = cv2.VideoCapture(0)
 
         self.mp_nodes = {}
-        self.initMPLandmarks()
+        self.init_MP_landmarks()
 
         self.pose = mp_pose.Pose(
             static_image_mode=False,
@@ -370,12 +394,62 @@ class Animate(ShowBase):
             enable_segmentation=True,
             min_detection_confidence=0.7)
 
-        self.counter = 0
+        self.mode = ModelCustomizations.No
+
+        self.setup_model_customizations()
+
+        self.accept('c', self.change_mode)
 
         # self.taskMgr.add(self.spinJoint, "SpinJoint")
         self.taskMgr.add(self.poseEstimation, "Pose Estimation")
 
-    def initMPLandmarks(self):
+    def setup_model_customizations(self):
+        heads = [j.getName() for j in self.model.getJoints(None, "head_*")]
+
+        head = self.ikchains[mp_pose.PoseLandmark.NOSE].get_bone(
+            heads[-1])
+
+        self.horn = self.loader.loadModel("horns.glb")
+        self.horn.setScale(0.04, 0.04, 0.04)
+        self.horn.setPos(0, 0, 0)
+        self.horn.setHpr(0, 180, 180)
+
+        self.horn.reparentTo(head.control_node)
+
+        self.pirate_hat = self.loader.loadModel("pirate_hat.glb")
+        self.pirate_hat.setScale(0.05, 0.05, 0.05)
+        self.pirate_hat.setPos(0, 0.1, 0.1)
+        self.pirate_hat.setHpr(0, 180, 180)
+        self.pirate_hat.reparentTo(head.control_node)
+
+        self.halo = self.loader.loadModel("halo.glb")
+        self.halo.setScale(0.05, 0.05, 0.05)
+        self.halo.setPos(0, 0.05, 0.1)
+        self.halo.setHpr(0, 180, 180)
+        self.halo.reparentTo(head.control_node)
+
+        self.horn.hide()
+        self.pirate_hat.hide()
+        self.halo.hide()
+
+    def change_mode(self):
+        self.horn.hide()
+        self.halo.hide()
+        self.pirate_hat.hide()
+
+        if self.mode == ModelCustomizations.Devil:
+            self.horn.show()
+            self.mode = ModelCustomizations.Angel
+        elif self.mode == ModelCustomizations.Angel:
+            self.halo.show()
+            self.mode = ModelCustomizations.Pirate
+        elif self.mode == ModelCustomizations.Pirate:
+            self.pirate_hat.show()
+            self.mode = ModelCustomizations.No
+        else:
+            self.mode = ModelCustomizations.Devil
+
+    def init_MP_landmarks(self):
         self.joints = {}
 
         lms = mp_pose.PoseLandmark
@@ -406,7 +480,7 @@ class Animate(ShowBase):
                         constraint['unit'],
                         min_ang=constraint['min_angle'],
                         max_ang=constraint['max_angle'])
-            chain.debug_display()
+            # chain.debug_display()
             return chain
 
         setLandmark(lms.NOSE)
